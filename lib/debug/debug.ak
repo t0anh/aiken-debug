@@ -26,7 +26,7 @@ fn pop_back(self: ByteArray, qty: Int) {
   bytearray.take(self, builtin.length_of_bytearray(self) - qty)
 }
 
-fn back(self: ByteArray) {
+fn last_char(self: ByteArray) {
   bytearray.drop(self, builtin.length_of_bytearray(self) - 1)
 }
 
@@ -60,14 +60,14 @@ fn get_digit(byte: Int) {
 
 fn hex_to_string(hex: ByteArray) {
   bytearray.foldl(
-    // pushing a dummy byte to get the last character 
+    // pushing a dummy byte to flush the last character 
     hex |> bytearray.concat("0"),
     ("", 0, 0),
     fn(byte, results) {
       let (acc, code, idx) = results
       let digit = get_digit(byte)
       if idx > 0 && idx % 2 == 0 {
-        (acc |> bytearray.concat(from_byte(code)), digit, idx + 1)
+        (acc |> bytearray.concat(to_bytearray(code)), digit, idx + 1)
       } else {
         (acc, code * 16 + digit, idx + 1)
       }
@@ -77,20 +77,16 @@ fn hex_to_string(hex: ByteArray) {
 }
 
 pub fn debug_cbor(cbr: String) {
-  string.to_bytearray(cbr) |> do_debug_cbor |> string.from_bytearray
+  string.to_bytearray(cbr) |> format_cbor |> string.from_bytearray
 }
 
-fn do_debug_cbor(bytes) {
+fn format_cbor(bytes) {
   bytes
     |> bytearray.foldl(
          ("", 0, False, ""),
          fn(byte, results) {
            let (builder, level, has_token, token) = results
-           let chr = from_byte(byte)
-           //  trace string.from_bytearray("byte: ")
-           //    |> string.concat(string.from_bytearray(chr))
-           // trace string.from_bytearray("builder: ")
-           //    |> string.concat(string.from_bytearray(builder))
+           let chr = to_bytearray(byte)
            if is_open(chr) {
              (
                builder
@@ -115,7 +111,15 @@ fn do_debug_cbor(bytes) {
                         builder
                       }
                     }
-                 |> newline(level - 1)
+                 |> fn(builder) {
+                      // pretty empty struct to be inline
+                      let last_chr = builder |> pop_back(level + 1) |> last_char
+                      if is_open(last_chr) {
+                        builder |> pop_back(level + 1)
+                      } else {
+                        builder |> newline(level - 1)
+                      }
+                    }
                  |> concat(chr),
                level - 1,
                has_token,
@@ -176,7 +180,7 @@ fn do_debug_cbor(bytes) {
     |> first_of_quad
 }
 
-fn from_byte(byte: Int) {
+fn to_bytearray(byte: Int) {
   #"" |> bytearray.push(byte)
 }
 
@@ -204,63 +208,59 @@ fn with_newline(builder: String) {
 fn with_inline_result(builder: String) {
   builder
     |> with_newline
-    |> string.concat(@">> ")
 }
 
 fn with_single_quote_surrounded(builder: String) {
   [@"'", @"'"] |> string.join(builder)
 }
 
-fn with_tag(self: String, tag: String) {
-  self |> string.concat(string.join([@"[", @"]"], tag))
+fn with_tag(self: String, name: String) {
+  self |> string.concat(string.join([@"[", @"]"], name))
 }
 
 fn with_multiline_result(builder: String) {
-  @"\n>>\n"
+  @"\n"
     |> string.concat(builder)
 }
 
 fn get_credential(cred: Credential) {
   when cred is {
     VerificationKeyCredential(hash) ->
-      string.concat(@"VerificationKeyCredential(", string.from_bytearray(hash))
+      string.concat(
+        @"VerificationKeyCredential(",
+        string.from_bytearray(hash) |> with_single_quote_surrounded,
+      )
         |> string.concat(@")")
     ScriptCredential(hash) ->
-      string.concat(@"ScriptCredential(", string.from_bytearray(hash))
+      string.concat(
+        @"ScriptCredential(",
+        string.from_bytearray(hash) |> with_single_quote_surrounded,
+      )
         |> string.concat(@")")
   }
 }
 
-pub fn debug_payment_credential(
-  return_value: r,
-  tag: String,
-  cred: PaymentCredential,
-) {
-  trace tag |> with_inline_result |> string.concat(get_credential(cred))
-  return_value
+pub fn debug_payment_credential(self: PaymentCredential, name: String) {
+  trace name |> with_inline_result |> string.concat(get_credential(self))
+  self
 }
 
-pub fn debug_stake_credential(
-  return_value: r,
-  tag: String,
-  cred: Option<StakeCredential>,
-) {
-  trace tag
+pub fn debug_stake_credential(self: Option<StakeCredential>, name: String) {
+  trace name
     |> with_inline_result
     |> string.concat(
-         when cred is {
+         when self is {
            None -> cbor.diagnostic(None)
            Some(Inline(cred)) -> get_credential(cred)
            _ -> fail
          },
        )
-
-  return_value
+  self
 }
 
-pub fn debug_out_ref(self: OutputReference, tag: String) {
+pub fn debug_out_ref(self: OutputReference, name: String) {
   let OutputReference(TransactionId(tx_hash), index) = self
-  trace tag
+  trace name
     |> with_inline_result
     |> string.concat(
          string.from_bytearray(tx_hash)
@@ -270,20 +270,21 @@ pub fn debug_out_ref(self: OutputReference, tag: String) {
   self
 }
 
-pub fn debug_address(return_value: r, tag: String, addr: Address) {
-  return_value
-    |> debug_stake_credential(
-         string.concat(tag, @".stake_cred"),
-         addr.stake_credential,
-       )
-    |> debug_payment_credential(
-         string.concat(tag, @".payment_cred"),
-         addr.payment_credential,
-       )
+pub fn debug_address(self: Address, name: String) {
+  Address {
+    stake_credential: debug_stake_credential(
+      self.stake_credential,
+      string.concat(name, @".stake_credential"),
+    ),
+    payment_credential: debug_payment_credential(
+      self.payment_credential,
+      string.concat(name, @".payment_credential"),
+    ),
+  }
 }
 
-pub fn debug_value(self: Value, tag: String) {
-  trace tag
+pub fn debug_value(self: Value, name: String) {
+  trace name
     |> string.concat(
          with_multiline_result(cbor.diagnostic(self |> flatten) |> debug_cbor),
        )
@@ -292,44 +293,39 @@ pub fn debug_value(self: Value, tag: String) {
 
 pub fn debug_minted_value(self: MintedValue, name: String) {
   trace name
+    |> with_newline
     |> string.concat(
-         with_multiline_result(
-           cbor.diagnostic(self |> value.from_minted_value |> flatten)
-             |> debug_cbor,
-         ),
+         cbor.diagnostic(self |> value.from_minted_value |> flatten)
+           |> debug_cbor,
        )
   self
 }
 
-pub fn debug_datum(return_value: r, tag: String, datum: Datum) {
-  trace tag
-    |> string.concat(with_multiline_result(cbor.diagnostic(datum) |> debug_cbor))
-  return_value
+pub fn debug_datum(self: Datum, name: String) {
+  trace name
+    |> string.concat(with_multiline_result(cbor.diagnostic(self) |> debug_cbor))
+  self
 }
 
-pub fn debug_output(self: Output, tag: String) {
+pub fn debug_output(self: Output, name: String) {
   Output {
     ..self,
-    address: debug_address(
-      self.address,
-      string.concat(tag, @".address"),
-      self.address,
-    ),
-    value: self.value |> debug_value(string.concat(tag, @".datum")),
-    datum: debug_datum(self.datum, string.concat(tag, @".datum"), self.datum),
+    address: debug_address(self.address, string.concat(name, @".address")),
+    value: debug_value(self.value, string.concat(name, @".value")),
+    datum: debug_datum(self.datum, string.concat(name, @".datum")),
   }
 }
 
-pub fn debug_redeemer(entry: (ScriptPurpose, Redeemer)) {
+pub fn debug_redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
   let (purpose, rdm) = entry
-  trace string.from_bytearray("")
+  trace name
     |> with_inline_result
     |> string.concat(@".purpose")
     |> with_newline
     |> string.concat(
          when purpose is {
            Mint(pid) ->
-             [@"Mint(policy_id=", @"]"]
+             [@"Mint(policy_id=", @")"]
                |> string.join(
                     pid |> bytearray.to_string |> with_single_quote_surrounded,
                   )
@@ -354,16 +350,12 @@ pub fn debug_redeemer(entry: (ScriptPurpose, Redeemer)) {
   entry
 }
 
-pub fn debug_input(self: Input, tag: String) {
+pub fn debug_input(self: Input, name: String) {
   Input {
     output_reference: self.output_reference
-      |> debug_out_ref(string.concat(tag, @".out_ref")),
-    output: self.output |> debug_output(string.concat(tag, @".output")),
+      |> debug_out_ref(string.concat(name, @".out_ref")),
+    output: self.output |> debug_output(string.concat(name, @".output")),
   }
-}
-
-fn with_var(self: r, name: String) -> r {
-  self
 }
 
 pub fn debug_redeemers(self: Dict<ScriptPurpose, Redeemer>) {
@@ -372,11 +364,10 @@ pub fn debug_redeemers(self: Dict<ScriptPurpose, Redeemer>) {
     |> list.indexed_map(
          fn(idx, rdm) {
            rdm
-             |> with_var(
-                  @".redeemers"
+             |> debug_redeemer(
+                  @"redeemers"
                     |> with_tag(string.from_int(idx)),
                 )
-             |> debug_redeemer
          },
        )
     |> fn(_) { self }
@@ -386,38 +377,40 @@ pub fn debug_tx(tx: Transaction) {
   Transaction {
     ..tx,
     redeemers: tx.redeemers
-      |> section(@"Redeemers")
+      |> debug_section(@"Redeemers")
       |> debug_redeemers()
-      |> end_section,
+      |> debug_section(@""),
     mint: tx.mint
+      |> debug_section(@"Mint")
       |> value.from_minted_value
       |> debug_value(@"mint")
       |> value.to_minted_value,
-    inputs: list.indexed_map(
-      tx.inputs,
-      fn(idx, in) {
-        debug_input(in, [@"input[", @"]"] |> string.join(string.from_int(idx)))
-      },
-    ),
-    outputs: list.indexed_map(
-      tx.outputs,
-      fn(idx, out) {
-        out
-          |> debug_output(
-               [@"output[", @"]"]
-                 |> string.join(string.from_int(idx)),
-             )
-      },
-    ),
+    inputs: tx.inputs
+      |> debug_section(@"Inputs")
+      |> list.indexed_map(
+           fn(idx, in) {
+             debug_input(in, @"inputs" |> with_tag(string.from_int(idx)))
+           },
+         ),
+    outputs: tx.outputs
+      |> debug_section(@"Outputs")
+      |> list.indexed_map(
+           fn(idx, out) {
+             debug_output(out, @"outputs" |> with_tag(string.from_int(idx)))
+           },
+         ),
   }
 }
 
-pub fn section(return_value: r, tag: String) -> r {
-  trace list.repeat(@"========================", 2) |> string.join(tag)
+pub fn debug_section(return_value: r, name: String) -> r {
+  let len = string.to_bytearray(name) |> builtin.length_of_bytearray
+  let width = 80
+  let left = ( width - len ) / 2
+  let right = width - len - left
+  trace [
+    @"=" |> list.repeat(left) |> string.join(@""),
+    @"=" |> list.repeat(right) |> string.join(@""),
+  ]
+    |> string.join(name)
   return_value
-}
-
-pub fn end_section(self: r) -> r {
-  trace list.repeat(@"========================", 2) |> string.join(@"")
-  self
 }
