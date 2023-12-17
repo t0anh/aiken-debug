@@ -210,11 +210,6 @@ fn with_newline(builder: String) {
        )
 }
 
-fn with_inline_result(builder: String) {
-  builder
-    |> with_newline
-}
-
 fn with_single_quote_surrounded(builder: String) {
   [@"'", @"'"] |> string.join(builder)
 }
@@ -246,13 +241,13 @@ fn get_credential(cred: Credential) {
 }
 
 pub fn debug_payment_credential(self: PaymentCredential, name: String) {
-  trace name |> with_inline_result |> string.concat(get_credential(self))
+  trace name |> with_newline |> string.concat(get_credential(self))
   self
 }
 
 pub fn debug_stake_credential(self: Option<StakeCredential>, name: String) {
   trace name
-    |> with_inline_result
+    |> with_newline
     |> string.concat(
          when self is {
            None -> cbor.diagnostic(None)
@@ -266,7 +261,7 @@ pub fn debug_stake_credential(self: Option<StakeCredential>, name: String) {
 pub fn debug_out_ref(self: OutputReference, name: String) {
   let OutputReference(TransactionId(tx_hash), index) = self
   trace name
-    |> with_inline_result
+    |> with_newline
     |> string.concat(
          string.from_bytearray(tx_hash)
            |> string.concat(@"#")
@@ -324,7 +319,7 @@ pub fn debug_output(self: Output, name: String) {
 fn debug_redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
   let (purpose, rdm) = entry
   trace name
-    |> with_inline_result
+    |> with_newline
     |> string.concat(@".purpose")
     |> with_newline
     |> string.concat(
@@ -345,7 +340,7 @@ fn debug_redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
            _ -> cbor.diagnostic(purpose) |> debug_cbor
          },
        )
-    |> with_inline_result
+    |> with_newline
     |> string.concat(@".redeemer")
     |> with_newline
     |> string.concat(
