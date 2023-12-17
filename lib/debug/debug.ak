@@ -1,7 +1,7 @@
 use aiken/builtin
 use aiken/bytearray.{concat}
 use aiken/cbor
-use aiken/dict
+use aiken/dict.{Dict}
 use aiken/list
 use aiken/string
 use aiken/transaction.{
@@ -12,10 +12,10 @@ use aiken/transaction/credential.{
   Address, Credential, Inline, PaymentCredential, ScriptCredential,
   StakeCredential, VerificationKeyCredential,
 }
-use aiken/transaction/value.{Value, flatten}
+use aiken/transaction/value.{MintedValue, Value, flatten}
 
-fn first_of_quad(tuple: (a, b, c, d)) {
-  tuple.1st
+fn first_of_quad(quad: (a, b, c, d)) {
+  quad.1st
 }
 
 fn first_of_triple(tuple: (a, b, c)) {
@@ -42,6 +42,10 @@ fn is_close(chr: ByteArray) {
     chr == "]",
     chr == "}",
   }
+}
+
+fn newline(self: ByteArray, indent_lvl: Int) {
+  self |> bytearray.concat("\n") |> indent(indent_lvl)
 }
 
 fn get_digit(byte: Int) {
@@ -72,61 +76,59 @@ fn hex_to_string(hex: ByteArray) {
     |> first_of_triple
 }
 
-pub fn beautify(cbr: String) {
-  string.to_bytearray(cbr) |> do_beautify |> string.from_bytearray
+pub fn debug_cbor(cbr: String) {
+  string.to_bytearray(cbr) |> do_debug_cbor |> string.from_bytearray
 }
 
-fn do_beautify(bytes) {
+fn do_debug_cbor(bytes) {
   bytes
     |> bytearray.foldl(
          ("", 0, False, ""),
          fn(byte, results) {
-           let (builder, level, is_token, token) = results
+           let (builder, level, has_token, token) = results
            let chr = from_byte(byte)
+           //  trace string.from_bytearray("byte: ")
+           //    |> string.concat(string.from_bytearray(chr))
+           // trace string.from_bytearray("builder: ")
+           //    |> string.concat(string.from_bytearray(builder))
            if is_open(chr) {
              (
                builder
                  |> concat(chr)
-                 |> concat("\n")
-                 |> concat(indent(level + 1)),
+                 |> newline(level + 1),
                level + 1,
-               is_token,
+               has_token,
                token,
              )
            } else if is_close(chr) {
              (
-               if back(builder) == "\t" {
-                 builder |> pop_back(level + 1) |> concat(chr)
-               } else {
-                 builder
-                   |> fn(builder) {
-                        if !is_token && builtin.length_of_bytearray(token) > 0 {
-                          builder
-                            |> concat(", # ")
-                            |> concat(
-                                 token
-                                   |> hex_to_string,
-                               )
-                        } else {
-                          builder
-                        }
+               builder
+                 |> fn(builder) {
+                      if !has_token && builtin.length_of_bytearray(token) > 0 {
+                        builder
+                          |> concat(", # ")
+                          |> concat(
+                               token
+                                 |> hex_to_string,
+                             )
+                      } else {
+                        builder
                       }
-                   |> concat("\n")
-                   |> concat(indent(level - 1))
-                   |> concat(chr)
-               },
+                    }
+                 |> newline(level - 1)
+                 |> concat(chr),
                level - 1,
-               is_token,
+               has_token,
                "",
              )
            } else if chr == "'" {
-             (builder |> concat(chr), level, !is_token, token)
+             (builder |> concat(chr), level, !has_token, token)
            } else if chr == "," {
              (
                builder
                  |> concat(chr)
                  |> fn(builder) {
-                      if !is_token && builtin.length_of_bytearray(token) > 0 {
+                      if !has_token && builtin.length_of_bytearray(token) > 0 {
                         builder
                           |> concat(" # ")
                           |> concat(
@@ -137,11 +139,10 @@ fn do_beautify(bytes) {
                         builder
                       }
                     }
-                 |> concat("\n")
-                 |> concat(indent(level)),
+                 |> newline(level),
                level,
-               is_token,
-               if !is_token {
+               has_token,
+               if !has_token {
                  ""
                } else {
                  token
@@ -151,20 +152,19 @@ fn do_beautify(bytes) {
              (
                builder
                  |> pop_back(level + 1)
-                 |> concat("\n")
-                 |> concat(indent(level)),
+                 |> newline(level),
                level,
-               is_token,
+               has_token,
                token,
              )
            } else if chr == " " {
-             (builder, level, is_token, token)
+             (builder, level, has_token, token)
            } else {
              (
                builder |> concat(chr),
                level,
-               is_token,
-               if is_token {
+               has_token,
+               if has_token {
                  token |> concat(chr)
                } else {
                  token
@@ -180,9 +180,18 @@ fn from_byte(byte: Int) {
   #"" |> bytearray.push(byte)
 }
 
-fn indent(level: Int) {
-  list.repeat("\t", level)
-    |> list.reduce("", bytearray.concat)
+pub fn debug_int(val: Int, name: String) {
+  trace name |> string.concat(string.from_int(val))
+  val
+}
+
+fn indent(self: ByteArray, level: Int) {
+  expect True == ( level >= 0 )
+  self
+    |> bytearray.concat(
+         list.repeat("\t", level)
+           |> list.reduce("", bytearray.concat),
+       )
 }
 
 fn with_newline(builder: String) {
@@ -202,6 +211,10 @@ fn with_single_quote_surrounded(builder: String) {
   [@"'", @"'"] |> string.join(builder)
 }
 
+fn with_tag(self: String, tag: String) {
+  self |> string.concat(string.join([@"[", @"]"], tag))
+}
+
 fn with_multiline_result(builder: String) {
   @"\n>>\n"
     |> string.concat(builder)
@@ -218,12 +231,16 @@ fn get_credential(cred: Credential) {
   }
 }
 
-pub fn payment_credential(return_value: r, tag: String, cred: PaymentCredential) {
+pub fn debug_payment_credential(
+  return_value: r,
+  tag: String,
+  cred: PaymentCredential,
+) {
   trace tag |> with_inline_result |> string.concat(get_credential(cred))
   return_value
 }
 
-pub fn stake_credential(
+pub fn debug_stake_credential(
   return_value: r,
   tag: String,
   cred: Option<StakeCredential>,
@@ -241,8 +258,8 @@ pub fn stake_credential(
   return_value
 }
 
-pub fn out_ref(return_value: r, tag: String, out_ref: OutputReference) {
-  let OutputReference(TransactionId(tx_hash), index) = out_ref
+pub fn debug_out_ref(self: OutputReference, tag: String) {
+  let OutputReference(TransactionId(tx_hash), index) = self
   trace tag
     |> with_inline_result
     |> string.concat(
@@ -250,42 +267,62 @@ pub fn out_ref(return_value: r, tag: String, out_ref: OutputReference) {
            |> string.concat(@"#")
            |> string.concat(string.from_int(index)),
        )
-  return_value
+  self
 }
 
-pub fn address(return_value: r, tag: String, addr: Address) {
+pub fn debug_address(return_value: r, tag: String, addr: Address) {
   return_value
-    |> stake_credential(string.concat(tag, @".stake_cred"), addr.stake_credential)
-    |> payment_credential(
+    |> debug_stake_credential(
+         string.concat(tag, @".stake_cred"),
+         addr.stake_credential,
+       )
+    |> debug_payment_credential(
          string.concat(tag, @".payment_cred"),
          addr.payment_credential,
        )
 }
 
-pub fn debug_value(return_value: r, tag: String, val: Value) {
+pub fn debug_value(self: Value, tag: String) {
   trace tag
     |> string.concat(
-         with_multiline_result(cbor.diagnostic(val |> flatten) |> beautify),
+         with_multiline_result(cbor.diagnostic(self |> flatten) |> debug_cbor),
        )
-  return_value
+  self
 }
 
-pub fn datum(return_value: r, tag: String, datum: Datum) {
+pub fn debug_minted_value(self: MintedValue, name: String) {
+  trace name
+    |> string.concat(
+         with_multiline_result(
+           cbor.diagnostic(self |> value.from_minted_value |> flatten)
+             |> debug_cbor,
+         ),
+       )
+  self
+}
+
+pub fn debug_datum(return_value: r, tag: String, datum: Datum) {
   trace tag
-    |> string.concat(with_multiline_result(cbor.diagnostic(datum) |> beautify))
+    |> string.concat(with_multiline_result(cbor.diagnostic(datum) |> debug_cbor))
   return_value
 }
 
-pub fn output(return_value: r, tag: String, output: Output) {
-  return_value
-    |> address(string.concat(tag, @".address"), output.address)
-    |> debug_value(string.concat(tag, @".value"), output.value)
-    |> datum(string.concat(tag, @".datum"), output.datum)
+pub fn debug_output(self: Output, tag: String) {
+  Output {
+    ..self,
+    address: debug_address(
+      self.address,
+      string.concat(tag, @".address"),
+      self.address,
+    ),
+    value: self.value |> debug_value(string.concat(tag, @".datum")),
+    datum: debug_datum(self.datum, string.concat(tag, @".datum"), self.datum),
+  }
 }
 
-pub fn redeemer(return_value: r, tag: String, entry: (ScriptPurpose, Redeemer)) {
+pub fn debug_redeemer(entry: (ScriptPurpose, Redeemer)) {
   let (purpose, rdm) = entry
-  trace tag
+  trace string.from_bytearray("")
     |> with_inline_result
     |> string.concat(@".purpose")
     |> with_newline
@@ -304,7 +341,7 @@ pub fn redeemer(return_value: r, tag: String, entry: (ScriptPurpose, Redeemer)) 
                       |> string.concat(string.from_int(index))
                       |> with_single_quote_surrounded,
                   )
-           _ -> cbor.diagnostic(purpose) |> beautify
+           _ -> cbor.diagnostic(purpose) |> debug_cbor
          },
        )
     |> with_inline_result
@@ -312,61 +349,75 @@ pub fn redeemer(return_value: r, tag: String, entry: (ScriptPurpose, Redeemer)) 
     |> with_newline
     |> string.concat(
          cbor.diagnostic(rdm)
-           |> beautify,
+           |> debug_cbor,
        )
-  return_value
+  entry
 }
 
-pub fn input(return_value: r, tag: String, input: Input) {
-  return_value
-    |> out_ref(string.concat(tag, @".out_ref"), input.output_reference)
-    |> output(string.concat(tag, @".output"), input.output)
+pub fn debug_input(self: Input, tag: String) {
+  Input {
+    output_reference: self.output_reference
+      |> debug_out_ref(string.concat(tag, @".out_ref")),
+    output: self.output |> debug_output(string.concat(tag, @".output")),
+  }
 }
 
-pub fn tx(return_value: r, tx: Transaction) {
-  return_value
-    |> fn(r) {
-         list.indexed_foldr(
-           tx.redeemers |> dict.to_list,
-           r,
-           fn(idx, rdm, res) {
-             redeemer(
-               res,
-               [@"redeemers[", @"]"] |> string.join(string.from_int(idx)),
-               rdm,
-             )
-           },
-         )
-       }
-    |> fn(r) {
-         list.indexed_foldr(
-           tx.inputs,
-           r,
-           fn(idx, in, res) {
-             input(
-               res,
-               [@"input[", @"]"] |> string.join(string.from_int(idx)),
-               in,
-             )
-           },
-         )
-       }
-    |> fn(r) {
-         list.indexed_foldr(
-           tx.outputs,
-           r,
-           fn(idx, out, res) {
-             output(
-               res,
-               [@"output[", @"]"] |> string.join(string.from_int(idx)),
-               out,
-             )
-           },
-         )
-       }
+fn with_var(self: r, name: String) -> r {
+  self
 }
 
-pub fn section(return_value: r, tag: String) {
+pub fn debug_redeemers(self: Dict<ScriptPurpose, Redeemer>) {
+  self
+    |> dict.to_list
+    |> list.indexed_map(
+         fn(idx, rdm) {
+           rdm
+             |> with_var(
+                  @".redeemers"
+                    |> with_tag(string.from_int(idx)),
+                )
+             |> debug_redeemer
+         },
+       )
+    |> fn(_) { self }
+}
+
+pub fn debug_tx(tx: Transaction) {
+  Transaction {
+    ..tx,
+    redeemers: tx.redeemers
+      |> section(@"Redeemers")
+      |> debug_redeemers()
+      |> end_section,
+    mint: tx.mint
+      |> value.from_minted_value
+      |> debug_value(@"mint")
+      |> value.to_minted_value,
+    inputs: list.indexed_map(
+      tx.inputs,
+      fn(idx, in) {
+        debug_input(in, [@"input[", @"]"] |> string.join(string.from_int(idx)))
+      },
+    ),
+    outputs: list.indexed_map(
+      tx.outputs,
+      fn(idx, out) {
+        out
+          |> debug_output(
+               [@"output[", @"]"]
+                 |> string.join(string.from_int(idx)),
+             )
+      },
+    ),
+  }
+}
+
+pub fn section(return_value: r, tag: String) -> r {
   trace list.repeat(@"========================", 2) |> string.join(tag)
   return_value
+}
+
+pub fn end_section(self: r) -> r {
+  trace list.repeat(@"========================", 2) |> string.join(@"")
+  self
 }
