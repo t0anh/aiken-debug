@@ -48,7 +48,7 @@ fn newline(self: ByteArray, indent_lvl: Int) {
   self |> bytearray.concat("\n") |> indent(indent_lvl)
 }
 
-fn get_digit(byte: Int) {
+fn to_decimal(byte: Int) {
   if byte >= 65 {
     byte - 65 + 10
   } else if byte >= 48 {
@@ -65,11 +65,11 @@ fn hex_to_string(hex: ByteArray) {
     ("", 0, 0),
     fn(byte, results) {
       let (acc, code, idx) = results
-      let digit = get_digit(byte)
+      let dec = to_decimal(byte)
       if idx > 0 && idx % 2 == 0 {
-        (acc |> bytearray.concat(to_bytearray(code)), digit, idx + 1)
+        (acc |> bytearray.concat(to_bytearray(code)), dec, idx + 1)
       } else {
-        (acc, code * 16 + digit, idx + 1)
+        (acc, code * 16 + dec, idx + 1)
       }
     },
   )
@@ -185,8 +185,13 @@ fn to_bytearray(byte: Int) {
 }
 
 pub fn debug_int(val: Int, name: String) {
-  trace name |> string.concat(string.from_int(val))
+  trace name |> with_newline |> string.concat(string.from_int(val))
   val
+}
+
+pub fn debug_bytearray(self: ByteArray, name: String) {
+  trace name |> with_newline |> string.concat(string.from_bytearray(self))
+  self
 }
 
 fn indent(self: ByteArray, level: Int) {
@@ -316,7 +321,7 @@ pub fn debug_output(self: Output, name: String) {
   }
 }
 
-pub fn debug_redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
+fn debug_redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
   let (purpose, rdm) = entry
   trace name
     |> with_inline_result

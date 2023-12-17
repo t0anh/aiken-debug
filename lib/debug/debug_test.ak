@@ -9,7 +9,11 @@ use aiken/transaction/credential.{
   Address, Inline, ScriptCredential, VerificationKeyCredential,
 }
 use aiken/transaction/value.{ada_asset_name, ada_policy_id}
-use debug/debug
+use debug/debug.{
+  debug_bytearray, debug_datum, debug_input, debug_int, debug_minted_value,
+  debug_out_ref, debug_output, debug_redeemers, debug_section, debug_tx,
+  debug_value,
+}
 
 type DatumType {
   owner: ByteArray,
@@ -27,48 +31,21 @@ fn compare(first: ScriptPurpose, second: ScriptPurpose) {
   )
 }
 
-test should_return_debug_value() {
+fn get_tx() {
   let default = transaction.placeholder()
-  let tx =
-    Transaction {
-      ..default,
-      redeemers: default.redeemers
-        |> dict.insert(Mint("minting_policy_id"), MintingRedeemer(1, "2"), compare),
-      mint: value.zero()
-        |> value.add("minting_policy_1", "asset_name_1", 1)
-        |> value.add("minting_policy_2", "asset_name_2", -1)
-        |> value.to_minted_value,
-      inputs: [
-        Input {
-          output_reference: OutputReference(TransactionId("tx_0"), 1),
-          output: Output {
-            value: value.from_lovelace(123_999_999),
-            address: Address {
-              stake_credential: Some(Inline(VerificationKeyCredential("stake"))),
-              payment_credential: VerificationKeyCredential("payment"),
-            },
-            datum: NoDatum,
-            reference_script: None,
-          },
-        },
-        Input {
-          output_reference: OutputReference(TransactionId("tx_0"), 0),
-          output: Output {
-            value: value.from_lovelace(99_999),
-            address: Address {
-              stake_credential: Some(
-                Inline(ScriptCredential("script_key_hash_0")),
-              ),
-              payment_credential: ScriptCredential("script_key_hash_1"),
-            },
-            datum: NoDatum,
-            reference_script: None,
-          },
-        },
-      ],
-      outputs: [
-        Output {
-          value: value.zero(),
+  Transaction {
+    ..default,
+    redeemers: default.redeemers
+      |> dict.insert(Mint("minting_policy_id"), MintingRedeemer(1, "2"), compare),
+    mint: value.zero()
+      |> value.add("minting_policy_1", "asset_name_1", 1)
+      |> value.add("minting_policy_2", "asset_name_2", -1)
+      |> value.to_minted_value,
+    inputs: [
+      Input {
+        output_reference: OutputReference(TransactionId("tx_0"), 1),
+        output: Output {
+          value: value.from_lovelace(123_999_999),
           address: Address {
             stake_credential: Some(Inline(VerificationKeyCredential("stake"))),
             payment_credential: VerificationKeyCredential("payment"),
@@ -76,18 +53,143 @@ test should_return_debug_value() {
           datum: NoDatum,
           reference_script: None,
         },
-        Output {
-          value: value.zero()
-            |> value.add(ada_policy_id, ada_asset_name, 123_000_000)
-            |> value.add("nft_policy_id", "nft_name", 1),
+      },
+      Input {
+        output_reference: OutputReference(TransactionId("tx_0"), 0),
+        output: Output {
+          value: value.from_lovelace(99_999),
           address: Address {
-            stake_credential: Some(Inline(VerificationKeyCredential("stake"))),
-            payment_credential: VerificationKeyCredential("payment"),
+            stake_credential: Some(
+              Inline(ScriptCredential("script_key_hash_0")),
+            ),
+            payment_credential: ScriptCredential("script_key_hash_1"),
           },
-          datum: InlineDatum(DatumType { owner: "datum_owner" }),
+          datum: NoDatum,
           reference_script: None,
         },
-      ],
+      },
+    ],
+    outputs: [
+      Output {
+        value: value.zero(),
+        address: Address {
+          stake_credential: Some(Inline(VerificationKeyCredential("stake"))),
+          payment_credential: VerificationKeyCredential("payment"),
+        },
+        datum: NoDatum,
+        reference_script: None,
+      },
+      Output {
+        value: value.zero()
+          |> value.add(ada_policy_id, ada_asset_name, 123_000_000)
+          |> value.add("nft_policy_id", "nft_name", 1),
+        address: Address {
+          stake_credential: Some(Inline(VerificationKeyCredential("stake"))),
+          payment_credential: VerificationKeyCredential("payment"),
+        },
+        datum: InlineDatum(DatumType { owner: "datum_owner" }),
+        reference_script: None,
+      },
+    ],
+  }
+}
+
+test works_with_bytearray() {
+  let my_bytearray = "my_bytearray"
+  ( my_bytearray |> debug_bytearray(@"my_bytearray") ) == my_bytearray
+}
+
+test works_with_int() {
+  let my_int = 100
+  ( my_int |> debug_int(@"my_int") ) == my_int
+}
+
+test works_with_non_zero_value() {
+  let my_value =
+    value.zero()
+      |> value.add(ada_policy_id, ada_asset_name, 123_000_000)
+      |> value.add("nft_policy_id", "nft_name", 1)
+  ( my_value |> debug_value(@"my_value") ) == my_value
+}
+
+test works_with_zero_value() {
+  let my_value = value.zero()
+  ( my_value |> debug_value(@"my_value") ) == my_value
+}
+
+test works_with_inline_datum() {
+  let my_value = InlineDatum(DatumType("decoded_from_hex"))
+  ( my_value |> debug_datum(@"my_datum") ) == my_value
+}
+
+test works_with_no_datum() {
+  let my_value = NoDatum
+  ( my_value |> debug_datum(@"my_datum") ) == my_value
+}
+
+test works_with_input() {
+  let my_value =
+    Input {
+      output_reference: OutputReference(TransactionId("tx_0"), 1),
+      output: Output {
+        value: value.from_lovelace(123_999_999),
+        address: Address {
+          stake_credential: Some(Inline(VerificationKeyCredential("stake"))),
+          payment_credential: VerificationKeyCredential("payment"),
+        },
+        datum: NoDatum,
+        reference_script: None,
+      },
     }
-  debug.debug_tx(tx) == tx
+  ( my_value |> debug_input(@"my_input") ) == my_value
+}
+
+test works_with_out_ref() {
+  let my_value = OutputReference(TransactionId("tx_0"), 1)
+  ( my_value |> debug_out_ref(@"my_output_reference") ) == my_value
+}
+
+test works_with_output() {
+  let my_value =
+    Output {
+      value: value.from_lovelace(123_999_999),
+      address: Address {
+        stake_credential: Some(Inline(VerificationKeyCredential("stake"))),
+        payment_credential: VerificationKeyCredential("payment"),
+      },
+      datum: NoDatum,
+      reference_script: None,
+    }
+  ( my_value |> debug_output(@"my_output") ) == my_value
+}
+
+test works_with_script_output() {
+  let my_value =
+    Output {
+      value: value.from_lovelace(99_999),
+      address: Address {
+        stake_credential: Some(Inline(ScriptCredential("script_key_hash_0"))),
+        payment_credential: ScriptCredential("script_key_hash_1"),
+      },
+      datum: NoDatum,
+      reference_script: None,
+    }
+  ( my_value |> debug_output(@"my_output") ) == my_value
+}
+
+test works_with_redeemers() {
+  let tx = get_tx()
+  let my_value = tx.redeemers
+  ( my_value |> debug_section(@"My Redeemers") |> debug_redeemers ) == my_value
+}
+
+test works_with_minted_value() {
+  let tx = get_tx()
+  let my_value = tx.mint
+  ( my_value |> debug_minted_value(@"my_minted_value") ) == my_value
+}
+
+test works_with_transaction() {
+  let tx = get_tx()
+  debug_tx(tx) == tx
 }
