@@ -12,7 +12,7 @@ use aiken/transaction/value.{ada_asset_name, ada_policy_id}
 use debug/debug.{
   debug_bytearray, debug_datum, debug_input, debug_int, debug_minted_value,
   debug_out_ref, debug_output, debug_redeemers, debug_section, debug_tx,
-  debug_value,
+  debug_value, format_cbor,
 }
 
 type DatumType {
@@ -192,4 +192,16 @@ test works_with_minted_value() {
 test works_with_transaction() {
   let tx = get_tx()
   debug_tx(tx) == tx
+}
+
+test works_with_cbor() {
+  let cbr =
+    @"[_ [_ h'', h'', 8731820539], [_ h'626F6E645F6E66745F706F6C6963795F6964', h'843C7CBAD2622B3013FABBE327FEBEF1DB5FEC4F20D0D706171DE24028C998E3', 1]]"
+  format_cbor(cbr) != @""
+}
+
+test works_with_cbor_2() {
+  let cbr =
+    @" 123([_ 121([_ {_ h'': {_ h'': 2383561 }, h'626F6E642D6E66742D706F6C6963792D6964': {_ h'5E72B098375D3959535E2717A1E87BB45F5864CFC279197C7984524C6EF4D783': 1 } }, 130, h'626F6E642D706F6C6963792D6964', h'5E72B098375D3959535E2717A1E87BB45F5864CFC279197C7984524C6EF4D783', 87, 10, 500, h'6861736865642D61737365742D6E616D65', 126])])"
+  format_cbor(cbr) != @""
 }

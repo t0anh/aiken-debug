@@ -34,6 +34,7 @@ fn is_open(chr: ByteArray) {
   or {
     chr == "[",
     chr == "{",
+    chr == "(",
   }
 }
 
@@ -41,6 +42,7 @@ fn is_close(chr: ByteArray) {
   or {
     chr == "]",
     chr == "}",
+    chr == ")",
   }
 }
 
@@ -49,9 +51,11 @@ fn newline(self: ByteArray, indent_lvl: Int) {
 }
 
 fn to_decimal(byte: Int) {
-  if byte >= 65 {
+  if byte >= 97 && byte <= 102 {
+    byte - 97 + 10
+  } else if byte >= 65 && byte <= 70 {
     byte - 65 + 10
-  } else if byte >= 48 {
+  } else if byte >= 48 && byte <= 57 {
     byte - 48
   } else {
     fail @"invalid digit"
@@ -67,7 +71,12 @@ fn hex_to_string(hex: ByteArray) {
       let (acc, code, idx) = results
       let dec = to_decimal(byte)
       if idx > 0 && idx % 2 == 0 {
-        (acc |> bytearray.concat(to_bytearray(code)), dec, idx + 1)
+        (
+          acc
+            |> bytearray.concat(to_bytearray(code)),
+          dec,
+          idx + 1,
+        )
       } else {
         (acc, code * 16 + dec, idx + 1)
       }
@@ -76,11 +85,11 @@ fn hex_to_string(hex: ByteArray) {
     |> first_of_triple
 }
 
-pub fn debug_cbor(cbr: String) {
-  string.to_bytearray(cbr) |> format_cbor |> string.from_bytearray
+pub fn format_cbor(cbr: String) {
+  cbr |> bytearray.from_string |> do_format_cbor |> bytearray.to_string
 }
 
-fn format_cbor(bytes) {
+fn do_format_cbor(bytes) {
   bytes
     |> bytearray.foldl(
          ("", 0, False, ""),
@@ -218,11 +227,6 @@ fn with_tag(self: String, name: String) {
   self |> string.concat(string.join([@"[", @"]"], name))
 }
 
-fn with_multiline_result(builder: String) {
-  @"\n"
-    |> string.concat(builder)
-}
-
 fn get_credential(cred: Credential) {
   when cred is {
     VerificationKeyCredential(hash) ->
@@ -285,9 +289,8 @@ pub fn debug_address(self: Address, name: String) {
 
 pub fn debug_value(self: Value, name: String) {
   trace name
-    |> string.concat(
-         with_multiline_result(cbor.diagnostic(self |> flatten) |> debug_cbor),
-       )
+    |> with_newline
+    |> string.concat(cbor.diagnostic(self |> flatten))
   self
 }
 
@@ -296,14 +299,15 @@ pub fn debug_minted_value(self: MintedValue, name: String) {
     |> with_newline
     |> string.concat(
          cbor.diagnostic(self |> value.from_minted_value |> flatten)
-           |> debug_cbor,
+           |> format_cbor,
        )
   self
 }
 
 pub fn debug_datum(self: Datum, name: String) {
   trace name
-    |> string.concat(with_multiline_result(cbor.diagnostic(self) |> debug_cbor))
+    |> with_newline
+    |> string.concat(cbor.diagnostic(self))
   self
 }
 
@@ -316,7 +320,7 @@ pub fn debug_output(self: Output, name: String) {
   }
 }
 
-fn debug_redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
+pub fn debug_redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
   let (purpose, rdm) = entry
   trace name
     |> with_newline
@@ -337,7 +341,7 @@ fn debug_redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
                       |> string.concat(string.from_int(index))
                       |> with_single_quote_surrounded,
                   )
-           _ -> cbor.diagnostic(purpose) |> debug_cbor
+           _ -> cbor.diagnostic(purpose) |> format_cbor
          },
        )
     |> with_newline
@@ -345,7 +349,7 @@ fn debug_redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
     |> with_newline
     |> string.concat(
          cbor.diagnostic(rdm)
-           |> debug_cbor,
+           |> format_cbor,
        )
   entry
 }
@@ -413,4 +417,26 @@ pub fn debug_section(return_value: r, name: String) -> r {
   ]
     |> string.join(name)
   return_value
+}
+
+pub fn debug_token_dict(self: Dict<ByteArray, Int>, name: String) {
+  trace name
+    |> list.foldl(
+         dict.to_list(self),
+         _,
+         fn(entry, builder) {
+           builder
+             |> with_newline
+             |> string.concat(cbor.diagnostic(entry))
+         },
+       )
+  self
+}
+
+pub fn debug_bytearray_list(self: List<ByteArray>, name: String) {
+  trace name
+    |> with_newline
+    |> string.concat(cbor.diagnostic(self))
+    |> format_cbor
+  self
 }
