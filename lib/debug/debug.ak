@@ -193,12 +193,12 @@ fn to_bytearray(byte: Int) {
   #"" |> bytearray.push(byte)
 }
 
-pub fn debug_int(val: Int, name: String) {
+pub fn int(val: Int, name: String) {
   trace name |> with_newline |> string.concat(string.from_int(val))
   val
 }
 
-pub fn debug_bytearray(self: ByteArray, name: String) {
+pub fn bytearray(self: ByteArray, name: String) {
   trace name |> with_newline |> string.concat(string.from_bytearray(self))
   self
 }
@@ -244,12 +244,12 @@ fn get_credential(cred: Credential) {
   }
 }
 
-pub fn debug_payment_credential(self: PaymentCredential, name: String) {
+pub fn payment_credential(self: PaymentCredential, name: String) {
   trace name |> with_newline |> string.concat(get_credential(self))
   self
 }
 
-pub fn debug_stake_credential(self: Option<StakeCredential>, name: String) {
+pub fn stake_credential(self: Option<StakeCredential>, name: String) {
   trace name
     |> with_newline
     |> string.concat(
@@ -262,7 +262,7 @@ pub fn debug_stake_credential(self: Option<StakeCredential>, name: String) {
   self
 }
 
-pub fn debug_out_ref(self: OutputReference, name: String) {
+pub fn out_ref(self: OutputReference, name: String) {
   let OutputReference(TransactionId(tx_hash), index) = self
   trace name
     |> with_newline
@@ -274,27 +274,27 @@ pub fn debug_out_ref(self: OutputReference, name: String) {
   self
 }
 
-pub fn debug_address(self: Address, name: String) {
+pub fn address(self: Address, name: String) {
   Address {
-    stake_credential: debug_stake_credential(
+    stake_credential: stake_credential(
       self.stake_credential,
       string.concat(name, @".stake_credential"),
     ),
-    payment_credential: debug_payment_credential(
+    payment_credential: payment_credential(
       self.payment_credential,
       string.concat(name, @".payment_credential"),
     ),
   }
 }
 
-pub fn debug_value(self: Value, name: String) {
+pub fn value(self: Value, name: String) {
   trace name
     |> with_newline
     |> string.concat(cbor.diagnostic(self |> flatten))
   self
 }
 
-pub fn debug_minted_value(self: MintedValue, name: String) {
+pub fn minted_value(self: MintedValue, name: String) {
   trace name
     |> with_newline
     |> string.concat(
@@ -304,23 +304,30 @@ pub fn debug_minted_value(self: MintedValue, name: String) {
   self
 }
 
-pub fn debug_datum(self: Datum, name: String) {
+pub fn data(self: Data, name: String) {
   trace name
     |> with_newline
     |> string.concat(cbor.diagnostic(self))
   self
 }
 
-pub fn debug_output(self: Output, name: String) {
+pub fn datum(self: Datum, name: String) {
+  trace name
+    |> with_newline
+    |> string.concat(cbor.diagnostic(self))
+  self
+}
+
+pub fn output(self: Output, name: String) {
   Output {
     ..self,
-    address: debug_address(self.address, string.concat(name, @".address")),
-    value: debug_value(self.value, string.concat(name, @".value")),
-    datum: debug_datum(self.datum, string.concat(name, @".datum")),
+    address: address(self.address, string.concat(name, @".address")),
+    value: value(self.value, string.concat(name, @".value")),
+    datum: datum(self.datum, string.concat(name, @".datum")),
   }
 }
 
-pub fn debug_redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
+pub fn redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
   let (purpose, rdm) = entry
   trace name
     |> with_newline
@@ -354,21 +361,21 @@ pub fn debug_redeemer(entry: (ScriptPurpose, Redeemer), name: String) {
   entry
 }
 
-pub fn debug_input(self: Input, name: String) {
+pub fn input(self: Input, name: String) {
   Input {
     output_reference: self.output_reference
-      |> debug_out_ref(string.concat(name, @".out_ref")),
-    output: self.output |> debug_output(string.concat(name, @".output")),
+      |> out_ref(string.concat(name, @".out_ref")),
+    output: self.output |> output(string.concat(name, @".output")),
   }
 }
 
-pub fn debug_redeemers(self: Dict<ScriptPurpose, Redeemer>) {
+pub fn redeemers(self: Dict<ScriptPurpose, Redeemer>) {
   self
     |> dict.to_list
     |> list.indexed_map(
          fn(idx, rdm) {
            rdm
-             |> debug_redeemer(
+             |> redeemer(
                   @"redeemers"
                     |> with_tag(string.from_int(idx)),
                 )
@@ -377,36 +384,36 @@ pub fn debug_redeemers(self: Dict<ScriptPurpose, Redeemer>) {
     |> fn(_) { self }
 }
 
-pub fn debug_tx(tx: Transaction) {
+pub fn tx(tx: Transaction) {
   Transaction {
     ..tx,
     redeemers: tx.redeemers
-      |> debug_section(@"Redeemers")
-      |> debug_redeemers()
-      |> debug_section(@""),
+      |> section(@"Redeemers")
+      |> redeemers()
+      |> section(@""),
     mint: tx.mint
-      |> debug_section(@"Mint")
+      |> section(@"Mint")
       |> value.from_minted_value
-      |> debug_value(@"mint")
+      |> value(@"mint")
       |> value.to_minted_value,
     inputs: tx.inputs
-      |> debug_section(@"Inputs")
+      |> section(@"Inputs")
       |> list.indexed_map(
            fn(idx, in) {
-             debug_input(in, @"inputs" |> with_tag(string.from_int(idx)))
+             input(in, @"inputs" |> with_tag(string.from_int(idx)))
            },
          ),
     outputs: tx.outputs
-      |> debug_section(@"Outputs")
+      |> section(@"Outputs")
       |> list.indexed_map(
            fn(idx, out) {
-             debug_output(out, @"outputs" |> with_tag(string.from_int(idx)))
+             output(out, @"outputs" |> with_tag(string.from_int(idx)))
            },
          ),
   }
 }
 
-pub fn debug_section(return_value: r, name: String) -> r {
+pub fn section(return_value: r, name: String) -> r {
   let len = string.to_bytearray(name) |> builtin.length_of_bytearray
   let width = 80
   let left = ( width - len ) / 2
@@ -419,7 +426,7 @@ pub fn debug_section(return_value: r, name: String) -> r {
   return_value
 }
 
-pub fn debug_token_dict(self: Dict<ByteArray, Int>, name: String) {
+pub fn token_dict(self: Dict<ByteArray, Int>, name: String) {
   trace name
     |> list.foldl(
          dict.to_list(self),
@@ -433,7 +440,7 @@ pub fn debug_token_dict(self: Dict<ByteArray, Int>, name: String) {
   self
 }
 
-pub fn debug_bytearray_list(self: List<ByteArray>, name: String) {
+pub fn bytearray_list(self: List<ByteArray>, name: String) {
   trace name
     |> with_newline
     |> string.concat(cbor.diagnostic(self))
