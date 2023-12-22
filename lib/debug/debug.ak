@@ -73,7 +73,7 @@ fn hex_to_string(hex: ByteArray) {
       if idx > 0 && idx % 2 == 0 {
         (
           acc
-            |> bytearray.concat(to_bytearray(code)),
+            |> bytearray.concat(code |> to_safe_code |> to_bytearray),
           dec,
           idx + 1,
         )
@@ -87,6 +87,15 @@ fn hex_to_string(hex: ByteArray) {
 
 pub fn format_cbor(cbr: String) {
   cbr |> bytearray.from_string |> do_format_cbor |> bytearray.to_string
+}
+
+pub fn to_safe_code(code: Int) {
+  if code > 127 {
+    // fallback to '?' when the code is a special character
+    63
+  } else {
+    code
+  }
 }
 
 fn do_format_cbor(bytes) {
@@ -290,7 +299,7 @@ pub fn address(self: Address, name: String) {
 pub fn value(self: Value, name: String) {
   trace name
     |> with_newline
-    |> string.concat(cbor.diagnostic(self |> flatten))
+    |> string.concat(cbor.diagnostic(self |> flatten) |> format_cbor)
   self
 }
 
@@ -307,14 +316,14 @@ pub fn minted_value(self: MintedValue, name: String) {
 pub fn data(self: Data, name: String) {
   trace name
     |> with_newline
-    |> string.concat(cbor.diagnostic(self))
+    |> string.concat(cbor.diagnostic(self) |> format_cbor)
   self
 }
 
 pub fn datum(self: Datum, name: String) {
   trace name
     |> with_newline
-    |> string.concat(cbor.diagnostic(self))
+    |> string.concat(cbor.diagnostic(self) |> format_cbor)
   self
 }
 
@@ -434,7 +443,7 @@ pub fn token_dict(self: Dict<ByteArray, Int>, name: String) {
          fn(entry, builder) {
            builder
              |> with_newline
-             |> string.concat(cbor.diagnostic(entry))
+             |> string.concat(cbor.diagnostic(entry) |> format_cbor)
          },
        )
   self
