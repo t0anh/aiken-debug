@@ -16,7 +16,7 @@ validator {
      when ctx.purpose is {
        Spend(_) -> or {
 -          must_be_signed_by(ctx.transaction, datum.owner),
-+          must_be_signed_by(ctx.transaction |> debug_tx, datum.owner),
++          must_be_signed_by(ctx.transaction |> debug.tx, datum.owner),
            and {
              must_be_signed_by(ctx.transaction, datum.beneficiary),
              must_start_after(ctx.transaction.validity_range, datum.lock_until),
